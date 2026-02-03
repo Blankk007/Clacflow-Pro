@@ -1,12 +1,16 @@
 import React, { useState, useEffect, useCallback } from "react";
+
 import * as math from "mathjs";
 import {
   Calculator,
   TrendingUp,
   Grid3x3,
   Sigma,
+  Sun,
   Moon,
-  Sun
+  Zap,
+  Droplet,
+  Sparkles,
 } from "lucide-react";
 import {
   LineChart,
@@ -15,64 +19,170 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer
+  ResponsiveContainer,
 } from "recharts";
 
-/* ================== MAIN APP ================== */
 export default function CalcFlowPro() {
   const [mode, setMode] = useState("home");
-  const [darkMode, setDarkMode] = useState(true);
+  const [theme, setTheme] = useState("dark"); // dark | light | neon | ocean
 
-  const bg = darkMode ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-900";
+  const themes = {
+    dark: {
+      bg: "bg-gradient-to-br from-gray-950 via-indigo-950 to-purple-950",
+      text: "text-white",
+      card: "bg-white/5 backdrop-blur-xl border border-white/10",
+      glow: "hover:shadow-[0_0_35px_rgba(139,92,246,0.4)]",
+      accent: "from-cyan-400 to-purple-500",
+    },
+    light: {
+      bg: "bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50",
+      text: "text-gray-900",
+      card: "bg-white/80 backdrop-blur-md border border-gray-200 shadow-xl",
+      glow: "hover:shadow-2xl hover:shadow-purple-200/60",
+      accent: "from-indigo-500 to-purple-600",
+    },
+    neon: {
+      bg: "bg-black",
+      text: "text-cyan-200",
+      card: "bg-black/40 backdrop-blur-xl border border-cyan-500/30",
+      glow: "hover:shadow-[0_0_40px_rgba(34,211,238,0.7)]",
+      accent: "from-cyan-300 to-pink-400",
+    },
+    ocean: {
+      bg: "bg-gradient-to-br from-teal-950 via-cyan-950 to-blue-950",
+      text: "text-cyan-50",
+      card: "bg-white/5 backdrop-blur-xl border border-cyan-500/20",
+      glow: "hover:shadow-[0_0_35px_rgba(6,182,212,0.5)]",
+      accent: "from-cyan-300 to-teal-400",
+    },
+  };
+
+  const current = themes[theme] || themes.dark;
+
+  const cycleTheme = () => {
+    const order = ["dark", "light", "neon", "ocean"];
+    const next = order[(order.indexOf(theme) + 1) % order.length];
+    setTheme(next);
+  };
 
   return (
-    <div className={`min-h-screen ${bg} transition-colors duration-300`}>
-      {mode === "home" && <Home setMode={setMode} darkMode={darkMode} setDarkMode={setDarkMode} />}
-      {mode === "basic" && <BasicCalc back={() => setMode("home")} darkMode={darkMode} />}
-      {mode === "graph" && <GraphCalc back={() => setMode("home")} darkMode={darkMode} />}
-      {mode === "matrix" && <MatrixCalc back={() => setMode("home")} darkMode={darkMode} />}
-      {mode === "calc" && <CalculusCalc back={() => setMode("home")} darkMode={darkMode} />}
+    <div className={`min-h-screen ${current.bg} ${current.text} transition-all duration-700 relative overflow-hidden`}>
+      {/* Background effects */}
+      <div className="absolute inset-0 opacity-20 pointer-events-none">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_25%,rgba(139,92,246,0.12),transparent_50%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_85%_75%,rgba(34,211,238,0.12),transparent_50%)]" />
+      </div>
+
+      {mode === "home" && (
+        <Home
+          setMode={setMode}
+          theme={theme}
+          cycleTheme={cycleTheme}
+          currentTheme={current}
+        />
+      )}
+      {mode === "basic" && <BasicCalc back={() => setMode("home")} currentTheme={current} />}
+      {mode === "graph" && <GraphCalc back={() => setMode("home")} currentTheme={current} />}
+      {mode === "matrix" && <MatrixCalc back={() => setMode("home")} currentTheme={current} />}
+      {mode === "calc" && <CalculusCalc back={() => setMode("home")} currentTheme={current} />}
     </div>
   );
 }
 
-/* ================== HOME ================== */
-function Home({ setMode, darkMode, setDarkMode }) {
+// ────────────────────────────────────────────────
+
+function Home({ setMode, cycleTheme, currentTheme }) {
+  const icons = [
+    <Calculator size={48} />,
+    <TrendingUp size={48} />,
+    <Grid3x3 size={48} />,
+    <Sigma size={48} />,
+  ];
+
+  const titles = ["Calculator", "Graph", "Matrix", "Calculus"];
+
   return (
-    <div className="p-8">
-      <header className="flex justify-between items-center mb-10">
-        <h1 className="text-5xl font-black bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent">
+    <div className="relative z-10 p-6 md:p-12 max-w-7xl mx-auto">
+      <header className="flex justify-between items-center mb-16">
+        <h1
+          className={`text-5xl md:text-7xl font-black bg-gradient-to-r ${currentTheme.accent} bg-clip-text text-transparent tracking-tight`}
+        >
           CalcFlow Pro
         </h1>
-        <button onClick={() => setDarkMode(!darkMode)}>
-          {darkMode ? <Sun /> : <Moon />}
+
+        <button
+          onClick={cycleTheme}
+          className="p-4 rounded-full bg-white/10 backdrop-blur-lg border border-white/20 hover:bg-white/20 transition-all duration-300 shadow-lg"
+        >
+          {currentTheme === "dark" ? (
+            <Sun size={28} />
+          ) : currentTheme === "light" ? (
+            <Moon size={28} />
+          ) : currentTheme === "neon" ? (
+            <Zap size={28} />
+          ) : (
+            <Droplet size={28} />
+          )}
         </button>
       </header>
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card title="Calculator" icon={<Calculator />} onClick={() => setMode("basic")} />
-        <Card title="Graph" icon={<TrendingUp />} onClick={() => setMode("graph")} />
-        <Card title="Matrix" icon={<Grid3x3 />} onClick={() => setMode("matrix")} />
-        <Card title="Calculus" icon={<Sigma />} onClick={() => setMode("calc")} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8">
+        {titles.map((title, i) => (
+          <div
+            key={title}
+            onClick={() => setMode(title.toLowerCase().replace("calculator", "basic").replace("calculus", "calc"))}
+            className={`group relative overflow-hidden p-8 md:p-10 rounded-3xl ${currentTheme.card} shadow-2xl transition-all duration-500 cursor-pointer hover:scale-[1.04] ${currentTheme.glow}`}
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+
+            <div className="relative z-10 flex flex-col items-center text-center">
+              <div className={`mb-6 text-cyan-300 group-hover:text-purple-300 transition-colors duration-300`}>
+                {icons[i]}
+              </div>
+              <h2 className="text-2xl md:text-3xl font-extrabold bg-gradient-to-r from-white via-cyan-200 to-purple-300 bg-clip-text text-transparent">
+                {title}
+              </h2>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-/* ================== BASIC CALCULATOR ================== */
-function BasicCalc({ back, darkMode }) {
+// ────────────────────────────────────────────────
+
+function Screen({ back, children, currentTheme }) {
+  return (
+    <div className="relative z-10 p-6 md:p-12 max-w-6xl mx-auto">
+      <button
+        onClick={back}
+        className="mb-8 flex items-center gap-2 text-cyan-400 hover:text-cyan-300 font-medium transition-colors"
+      >
+        ← Back to Home
+      </button>
+      {children}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────
+
+function BasicCalc({ back, currentTheme }) {
   const [display, setDisplay] = useState("0");
   const [history, setHistory] = useState([]);
 
-  const append = (v) => {
+  // ✅ append value
+  const append = useCallback((v) => {
     setDisplay((d) => {
       if (d === "Error") return v;
-      if (/[+*/.-]$/.test(d) && /[+*/.-]/.test(v)) return d;
-      return d === "0" ? v : d + v;
+      if (d === "0" && v !== ".") return v;
+      return d + v;
     });
-  };
+  }, []);
 
-  const evaluate = () => {
+  // ✅ evaluate expression
+  const evaluate = useCallback(() => {
     try {
       const res = math.evaluate(display);
       setHistory((h) => [...h.slice(-4), `${display} = ${res}`]);
@@ -80,171 +190,248 @@ function BasicCalc({ back, darkMode }) {
     } catch {
       setDisplay("Error");
     }
-  };
-
-  const clear = () => setDisplay("0");
-
-  useEffect(() => {
-    const handler = (e) => {
-      if ("0123456789+-*/.".includes(e.key)) append(e.key);
-      if (e.key === "Enter") evaluate();
-      if (e.key === "Backspace") setDisplay((d) => d.slice(0, -1) || "0");
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
   }, [display]);
 
+  // ✅ clear display
+  const clear = useCallback(() => {
+    setDisplay("0");
+  }, []);
+
+  // ✅ central button logic
+  const handleButtonClick = (val) => {
+    if (val === "C") clear();
+    else if (val === "=") evaluate();
+    else append(val);
+  };
+
+  // ✅ keyboard support (SAFE)
+  useEffect(() => {
+    const handler = (e) => {
+      if (document.activeElement.tagName === "INPUT") return;
+
+      if ("0123456789+-*/.".includes(e.key)) append(e.key);
+      if (e.key === "Enter") evaluate();
+      if (e.key === "Backspace") {
+        setDisplay((d) => (d.length > 1 ? d.slice(0, -1) : "0"));
+      }
+    };
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [append, evaluate]);
+
+  const buttons = [
+    "C", "/", 
+    "7", "8", "9", "*",
+    "4", "5", "6", "-",
+    "1", "2", "3", "+",
+    "0", ".", "=",
+  ];
+
   return (
-    <Screen back={back} darkMode={darkMode}>
-      <div className="text-right text-6xl font-black mb-4">{display}</div>
+    <Screen back={back} currentTheme={currentTheme}>
+      <div className="mb-6 text-right text-5xl font-black break-all">
+        {display}
+      </div>
+
       <div className="grid grid-cols-4 gap-3">
-        {["7","8","9","/","4","5","6","*","1","2","3","-","0",".","=","+"]
-          .map((k) => (
-            <button
-              key={k}
-              onClick={() => k === "=" ? evaluate() : append(k)}
-              className="btn"
-            >
-              {k}
-            </button>
-          ))}
-        <button onClick={clear} className="btn col-span-4 bg-red-500">Clear</button>
+        {buttons.map((b) => (
+          <button
+            key={b}
+            onClick={() => handleButtonClick(b)}
+            className={`
+              p-5 rounded-xl font-bold text-white transition active:scale-95
+              ${
+                b === "C"
+                  ? "bg-red-600"
+                  : b === "="
+                  ? "bg-green-600"
+                  : "+-*/".includes(b)
+                  ? "bg-indigo-600"
+                  : "bg-gray-700"
+              }
+            `}
+          >
+            {b}
+          </button>
+        ))}
       </div>
 
       {history.length > 0 && (
         <div className="mt-6 text-sm opacity-70">
           <h4 className="font-bold mb-2">History</h4>
-          {history.map((h, i) => <div key={i}>{h}</div>)}
+          {history.map((h, i) => (
+            <div key={i}>{h}</div>
+          ))}
         </div>
       )}
     </Screen>
   );
 }
 
-/* ================== GRAPH ================== */
-function GraphCalc({ back, darkMode }) {
+
+// ────────────────────────────────────────────────
+
+function GraphCalc({ back, currentTheme }) {
   const [eq, setEq] = useState("x^2");
   const [data, setData] = useState([]);
 
   const plot = () => {
-    const pts = [];
-    for (let x = -10; x <= 10; x += 0.1) {
-      try {
-        const y = math.evaluate(eq, { x });
-        if (isFinite(y)) pts.push({ x, y });
-      } catch {}
-    }
-    setData(pts);
-  };
+  const pts = [];
+  for (let x = -10; x <= 10; x += 0.2) {
+    try {
+      const y = math.evaluate(eq, { x });
+      if (typeof y === "number" && isFinite(y)) {
+        pts.push({ x, y });
+      }
+    } catch {}
+  }
+  setData(pts);
+};
+
 
   return (
-    <Screen back={back} darkMode={darkMode}>
-      <input value={eq} onChange={(e) => setEq(e.target.value)} className="input" />
-      <button onClick={plot} className="btn mt-4">Plot</button>
+    <Screen back={back} currentTheme={currentTheme}>
+      <div className="mb-6">
+        <input
+          value={eq}
+          onChange={(e) => setEq(e.target.value)}
+          placeholder="e.g. x^2 + sin(x)"
+          className="w-full p-5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-white text-xl outline-none focus:border-cyan-400 transition"
+        />
+      </div>
 
-      <ResponsiveContainer width="100%" height={400}>
-        <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="x" />
-          <YAxis />
-          <Tooltip />
-          <Line dataKey="y" dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
+      <button
+        onClick={plot}
+        className="px-10 py-5 rounded-2xl bg-gradient-to-r from-cyan-500 to-purple-600 font-bold text-lg hover:brightness-110 transition mb-10 shadow-lg"
+      >
+        Plot Function
+      </button>
+
+      <div className="h-96 w-full rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
+        <ResponsiveContainer>
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+            <XAxis dataKey="x" stroke="rgba(255,255,255,0.6)" />
+            <YAxis stroke="rgba(255,255,255,0.6)" />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: "rgba(30,30,50,0.9)",
+                border: "1px solid rgba(139,92,246,0.4)",
+                borderRadius: "12px",
+                color: "white",
+              }}
+            />
+            <Line type="monotone" dataKey="y" stroke="#a78bfa" strokeWidth={3} dot={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
     </Screen>
   );
 }
 
-/* ================== MATRIX ================== */
-function MatrixCalc({ back, darkMode }) {
+// ────────────────────────────────────────────────
+
+function MatrixCalc({ back, currentTheme }) {
   const make = () => Array.from({ length: 3 }, () => Array(3).fill(0));
   const [A, setA] = useState(make());
   const [result, setResult] = useState("");
 
   const op = (type) => {
     try {
-      if (type === "det") setResult(math.det(A).toString());
-      if (type === "inv") setResult(JSON.stringify(math.inv(A)));
+      if (type === "det") setResult(math.det(A).toFixed(4));
+      if (type === "inv") setResult(JSON.stringify(math.inv(A), null, 2));
     } catch (e) {
-      setResult(e.message);
+      setResult("Error: " + e.message);
     }
   };
 
   return (
-    <Screen back={back} darkMode={darkMode}>
-      <MatrixEditor matrix={A} setMatrix={setA} darkMode={darkMode} />
-      <div className="flex gap-3 mb-4">
-        <button className="btn" onClick={() => op("det")}>det(A)</button>
-        <button className="btn" onClick={() => op("inv")}>A⁻¹</button>
+    <Screen back={back} currentTheme={currentTheme}>
+      <div className="mb-8 text-2xl font-bold">3×3 Matrix</div>
+
+      <div className="flex flex-col gap-3 mb-8">
+        {A.map((row, i) => (
+          <div key={i} className="flex gap-3">
+            {row.map((v, j) => (
+              <input
+                key={j}
+                type="number"
+                value={v}
+                onChange={(e) => {
+                  const next = A.map((r) => [...r]);
+                  next[i][j] = +e.target.value || 0;
+                  setA(next);
+                }}
+                className="w-20 p-4 text-center rounded-xl bg-white/10 backdrop-blur-md border border-white/20 text-white outline-none focus:border-purple-400 transition text-lg"
+              />
+            ))}
+          </div>
+        ))}
       </div>
-      <pre className="text-sm">{result}</pre>
+
+      <div className="flex gap-4 mb-8">
+        <button
+          onClick={() => op("det")}
+          className="px-8 py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-700 font-bold transition shadow-lg"
+        >
+          Determinant
+        </button>
+        <button
+          onClick={() => op("inv")}
+          className="px-8 py-4 rounded-2xl bg-purple-600 hover:bg-purple-700 font-bold transition shadow-lg"
+        >
+          Inverse
+        </button>
+      </div>
+
+      {result && (
+        <pre className="bg-black/40 backdrop-blur-md p-6 rounded-2xl border border-white/10 text-sm overflow-auto max-h-96">
+          {result}
+        </pre>
+      )}
     </Screen>
   );
 }
 
-/* ================== CALCULUS ================== */
-function CalculusCalc({ back, darkMode }) {
-  const [input, setInput] = useState("x^2 + 3x");
+// ────────────────────────────────────────────────
+
+function CalculusCalc({ back, currentTheme }) {
+  const [input, setInput] = useState("x^2 + 3x + 1");
   const [res, setRes] = useState("");
 
   const diff = () => {
     try {
-      setRes(math.derivative(input, "x").toString());
+      const der = math.derivative(input, "x");
+      setRes(der.toString());
     } catch {
       setRes("Invalid expression");
     }
   };
 
   return (
-    <Screen back={back} darkMode={darkMode}>
-      <input value={input} onChange={(e) => setInput(e.target.value)} className="input" />
-      <button onClick={diff} className="btn mt-4">Derivative</button>
-      <div className="mt-4 text-xl font-bold">{res}</div>
+    <Screen back={back} currentTheme={currentTheme}>
+      <div className="mb-6">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="e.g. x^3 - 2x + sin(x)"
+          className="w-full p-5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 text-white text-xl outline-none focus:border-cyan-400 transition"
+        />
+      </div>
+
+      <button
+        onClick={diff}
+        className="px-10 py-5 rounded-2xl bg-gradient-to-r from-teal-500 to-cyan-600 font-bold text-lg hover:brightness-110 transition shadow-lg"
+      >
+        Compute Derivative
+      </button>
+
+      {res && (
+        <div className="mt-10 text-3xl font-bold bg-gradient-to-r from-cyan-300 to-purple-400 bg-clip-text text-transparent">
+          d/dx = {res}
+        </div>
+      )}
     </Screen>
   );
 }
-
-/* ================== UI COMPONENTS ================== */
-function Screen({ back, children, darkMode }) {
-  return (
-    <div className="p-6">
-      <button onClick={back} className="mb-4 text-cyan-400">← Back</button>
-      {children}
-    </div>
-  );
-}
-
-function Card({ title, icon, onClick }) {
-  return (
-    <div onClick={onClick} className="p-8 rounded-3xl bg-indigo-600 text-white cursor-pointer hover:scale-105 transition">
-      {icon}
-      <h2 className="text-2xl font-bold mt-4">{title}</h2>
-    </div>
-  );
-}
-
-function MatrixEditor({ matrix, setMatrix, darkMode }) {
-  return matrix.map((row, i) => (
-    <div key={i} className="flex gap-2 mb-2">
-      {row.map((v, j) => (
-        <input
-          key={j}
-          type="number"
-          value={v}
-          onChange={(e) => {
-            const next = matrix.map((r) => [...r]);
-            next[i][j] = +e.target.value;
-            setMatrix(next);
-          }}
-          className={`w-16 p-2 text-center rounded ${darkMode ? "bg-gray-800" : "bg-white"}`}
-        />
-      ))}
-    </div>
-  ));
-}
-
-/* ================== GLOBAL STYLES (TAILWIND) ==================
-.input { @apply w-full p-3 rounded-xl bg-gray-800 text-white outline-none; }
-.btn { @apply p-3 rounded-xl bg-gray-700 font-bold hover:bg-gray-600; }
-================================================ */
-
