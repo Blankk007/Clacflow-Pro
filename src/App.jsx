@@ -54,6 +54,13 @@ globalStyle.textContent = `
   .math-kbd-btn.kbd-accent:hover { background:rgba(56,189,248,0.1); }
   .math-preview { font-family:'DM Mono',monospace; font-size:17px; color:var(--text); min-height:26px; word-break:break-all; line-height:1.6; }
   .math-preview sup { font-size:0.62em; line-height:0; position:relative; top:-0.5em; color:var(--accent2); }
+  /* Beautiful math rendering */
+  .math-display { display:inline-flex; align-items:center; flex-wrap:wrap; font-family:Georgia,'Times New Roman',serif; user-select:text; }
+  .math-var { font-style:italic; color:var(--text); }
+  .math-num { color:var(--accent); }
+  .math-const { color:var(--accent3); font-style:normal; }
+  .math-fn { font-style:normal; color:var(--text); letter-spacing:0.02em; }
+  .math-op { color:var(--muted); }
   ::-webkit-scrollbar { width:4px; height:4px; }
   ::-webkit-scrollbar-track { background:transparent; }
   ::-webkit-scrollbar-thumb { background:#2a3045; border-radius:4px; }
@@ -103,27 +110,106 @@ function formatResult(val) {
   return parseFloat(val.toPrecision(10)).toString();
 }
 
-function renderMathExpr(expr) {
-  const nodes = []; let i = 0, buf = "", key = 0;
-  const flush = () => { if (buf) { nodes.push(<span key={key++}>{buf}</span>); buf = ""; } };
-  while (i < expr.length) {
-    if (expr[i] === "^") {
-      flush(); i++;
-      let exp = "";
-      if (expr[i] === "(") {
-        let d = 0, j = i;
-        while (j < expr.length) { if (expr[j]==="(") d++; else if (expr[j]===")") { d--; if (!d){j++;break;} } j++; }
-        exp = expr.slice(i,j); i = j;
-      } else {
-        let j = i; if (expr[j]==="-") j++;
-        while (j < expr.length && /[0-9a-zA-Z._]/.test(expr[j])) j++;
-        exp = expr.slice(i,j); i = j;
-      }
-      nodes.push(<sup key={key++}>{exp}</sup>);
-    } else { buf += expr[i]; i++; }
-  }
-  flush(); return nodes;
+/* ── MATH RENDERER ──────────────────────────────────────── */
+function hexToRgb(hex) {
+  if (!hex?.startsWith('#')) return '100,116,139';
+  return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`;
 }
+
+let _mk = 0;
+function _mjsx(node) {
+  if (!node) return null;
+  const key = _mk++;
+
+  const Par = (c) => <span key={_mk++}><span style={{color:'rgba(100,116,139,0.75)'}}>&#40;</span>{c}<span style={{color:'rgba(100,116,139,0.75)'}}>&#41;</span></span>;
+
+  if (node.type==='ConstantNode') {
+    const s = typeof node.value==='number' ? parseFloat(node.value.toPrecision(10)).toString() : String(node.value);
+    return <span key={key} className="math-num">{s}</span>;
+  }
+
+  if (node.type==='SymbolNode') {
+    const M={pi:'π',Infinity:'∞',inf:'∞'}; const sym=M[node.name]??node.name;
+    return <span key={key} className={['pi','e','Infinity','inf','i'].includes(node.name)?'math-const':'math-var'}>{sym}</span>;
+  }
+
+  if (node.type==='OperatorNode') {
+    const {fn,op,args}=node;
+    if (fn==='unaryMinus') {
+      const a=args[0]; const nP=a.type==='OperatorNode'&&(a.fn==='add'||a.fn==='subtract');
+      return <span key={key} style={{display:'inline-flex',alignItems:'center'}}><span className="math-op">−</span>{nP?Par(_mjsx(a)):_mjsx(a)}</span>;
+    }
+    if (fn==='unaryPlus') return _mjsx(args[0]);
+    if (fn==='pow') {
+      const [base,expo]=args; const bNP=base.type==='OperatorNode';
+      return <span key={key} style={{display:'inline-flex',alignItems:'flex-start',lineHeight:1}}>
+        {bNP?Par(_mjsx(base)):_mjsx(base)}
+        <sup style={{fontSize:'0.6em',lineHeight:1,color:'var(--accent2)',marginTop:'2px',fontFamily:'Georgia,serif'}}>{_mjsx(expo)}</sup>
+      </span>;
+    }
+    if (fn==='divide') {
+      return <span key={key} style={{display:'inline-flex',flexDirection:'column',alignItems:'center',verticalAlign:'middle',margin:'0 5px',lineHeight:1.3}}>
+        <span style={{borderBottom:'1.5px solid rgba(226,232,240,0.28)',paddingBottom:'2px',paddingLeft:'5px',paddingRight:'5px',textAlign:'center'}}>{_mjsx(args[0])}</span>
+        <span style={{paddingTop:'2px',paddingLeft:'5px',paddingRight:'5px',textAlign:'center'}}>{_mjsx(args[1])}</span>
+      </span>;
+    }
+    if (fn==='multiply') {
+      const [l,r]=args;
+      const lNP=l.type==='OperatorNode'&&(l.fn==='add'||l.fn==='subtract');
+      const rNP=r.type==='OperatorNode'&&(r.fn==='add'||r.fn==='subtract');
+      const lP=lNP?Par(_mjsx(l)):_mjsx(l); const rP=rNP?Par(_mjsx(r)):_mjsx(r);
+      const dot=l.type==='ConstantNode'&&r.type==='ConstantNode';
+      return <span key={key} style={{display:'inline-flex',alignItems:'center'}}>{lP}{dot&&<span className="math-op" style={{margin:'0 2px'}}>·</span>}{rP}</span>;
+    }
+    if (fn==='add') {
+      const [l,r]=args;
+      if (r.type==='OperatorNode'&&r.fn==='unaryMinus')
+        return <span key={key} style={{display:'inline-flex',alignItems:'center',flexWrap:'wrap'}}>{_mjsx(l)}<span className="math-op" style={{margin:'0 5px'}}>−</span>{_mjsx(r.args[0])}</span>;
+      return <span key={key} style={{display:'inline-flex',alignItems:'center',flexWrap:'wrap'}}>{_mjsx(l)}<span className="math-op" style={{margin:'0 5px'}}>+</span>{_mjsx(r)}</span>;
+    }
+    if (fn==='subtract') {
+      const [l,r]=args; const rNP=r.type==='OperatorNode'&&(r.fn==='add'||r.fn==='subtract');
+      return <span key={key} style={{display:'inline-flex',alignItems:'center',flexWrap:'wrap'}}>{_mjsx(l)}<span className="math-op" style={{margin:'0 5px'}}>−</span>{rNP?Par(_mjsx(r)):_mjsx(r)}</span>;
+    }
+    return <span key={key} style={{display:'inline-flex',alignItems:'center',gap:'3px'}}>{_mjsx(args[0])}<span className="math-op">{op}</span>{args[1]&&_mjsx(args[1])}</span>;
+  }
+
+  if (node.type==='FunctionNode') {
+    const {name,args}=node;
+    const FNM={sin:'sin',cos:'cos',tan:'tan',asin:'arcsin',acos:'arccos',atan:'arctan',
+      sinh:'sinh',cosh:'cosh',tanh:'tanh',asinh:'arcsinh',acosh:'arccosh',atanh:'arctanh',
+      log:'ln',log10:'log',ln:'ln',exp:'exp',round:'round',sign:'sgn'};
+    if (name==='sqrt') return <span key={key} style={{display:'inline-flex',alignItems:'center'}}><span style={{fontSize:'1.25em',lineHeight:1,fontWeight:300,marginRight:'1px'}}>√</span><span style={{borderTop:'1.5px solid rgba(226,232,240,0.35)',paddingTop:'1px',paddingLeft:'2px',paddingRight:'4px'}}>{_mjsx(args[0])}</span></span>;
+    if (name==='abs') return <span key={key}><span style={{color:'rgba(100,116,139,0.75)'}}>|</span>{_mjsx(args[0])}<span style={{color:'rgba(100,116,139,0.75)'}}>|</span></span>;
+    if (name==='ceil') return <span key={key}><span style={{color:'rgba(100,116,139,0.75)'}}>⌈</span>{_mjsx(args[0])}<span style={{color:'rgba(100,116,139,0.75)'}}>⌉</span></span>;
+    if (name==='floor') return <span key={key}><span style={{color:'rgba(100,116,139,0.75)'}}>⌊</span>{_mjsx(args[0])}<span style={{color:'rgba(100,116,139,0.75)'}}>⌋</span></span>;
+    const dn=FNM[name]??name;
+    return <span key={key} style={{display:'inline-flex',alignItems:'center'}}>
+      <span className="math-fn">{dn}</span>
+      <span style={{color:'rgba(100,116,139,0.75)'}}>&#40;</span>
+      {args.map((a,i)=><React.Fragment key={i}>{i>0&&<span className="math-op">,&thinsp;</span>}{_mjsx(a)}</React.Fragment>)}
+      <span style={{color:'rgba(100,116,139,0.75)'}}>&#41;</span>
+    </span>;
+  }
+
+  if (node.type==='ParenthesisNode') return Par(_mjsx(node.content));
+  return <span key={key} className="math-op">{node.toString?.()??String(node)}</span>;
+}
+
+function MathDisplay({ expr, size="md", style={} }) {
+  if (!expr?.trim()) return null;
+  const fs = {sm:13,md:18,lg:22,xl:28}[size]??18;
+  try {
+    _mk = 0;
+    const node = math.parse(preprocess(String(expr)));
+    return <span className="math-display" style={{fontSize:fs,lineHeight:2.1,...style}}>{_mjsx(node)}</span>;
+  } catch {
+    return <span style={{fontFamily:'DM Mono,monospace',fontSize:Math.max(12,fs-3),color:'var(--muted)',...style}}>{expr}</span>;
+  }
+}
+
+// Legacy compatibility
+function renderMathExpr(expr) { return <MathDisplay expr={expr}/>; }
 
 /* ── MATH KEYBOARD ────────────────────────────────────── */
 const KBD_ROWS = [
@@ -311,13 +397,18 @@ function ExprRow({ exp, onUpdate, onRemove, showRemove }) {
   const [showKbd,setShowKbd]=useState(false);
   const inputRef=useRef(null);
   return (
-    <div style={{marginBottom:8}}>
+    <div style={{marginBottom:10}}>
       <div style={{display:"flex",gap:6,alignItems:"center"}}>
         <div style={{width:10,height:10,borderRadius:"50%",background:exp.color,flexShrink:0,boxShadow:`0 0 6px ${exp.color}88`}}/>
         <input ref={inputRef} className="cf-input" value={exp.value} onChange={e=>onUpdate(exp.id,e.target.value)} placeholder="e.g. sin(x), e^x, x^2-3" style={{flex:1,borderColor:exp.color+"55",padding:"8px 12px",fontSize:14}}/>
         <button onClick={()=>setShowKbd(v=>!v)} title="Math keyboard" style={{width:34,height:34,borderRadius:8,flexShrink:0,cursor:"pointer",background:showKbd?"rgba(129,140,248,0.2)":"var(--surface2)",border:`1px solid ${showKbd?"rgba(129,140,248,0.5)":"var(--border)"}`,color:showKbd?"#818cf8":"var(--muted)",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>⌨</button>
         {showRemove&&<button onClick={()=>onRemove(exp.id)} style={{width:34,height:34,borderRadius:8,flexShrink:0,background:"none",border:"1px solid var(--border)",color:"var(--muted)",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>}
       </div>
+      {exp.value.trim()&&(
+        <div style={{marginLeft:22,marginTop:4,padding:"5px 12px",background:"rgba(0,0,0,0.2)",borderRadius:8,borderLeft:`2px solid ${exp.color}66`,display:"flex",alignItems:"center",minHeight:32,overflowX:"auto"}}>
+          <MathDisplay expr={exp.value} size="sm" style={{color:exp.color}}/>
+        </div>
+      )}
       {showKbd&&<div style={{marginTop:8,marginLeft:16}}><MathKeyboard inputRef={inputRef} value={exp.value} onChange={v=>onUpdate(exp.id,v)}/></div>}
     </div>
   );
@@ -824,6 +915,11 @@ function ExprRow3D({ exp, onUpdate, onRemove, showRemove }) {
             style={{ width:34,height:34,borderRadius:8,flexShrink:0,background:"none",border:"1px solid var(--border)",color:"var(--muted)",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center" }}>×</button>
         )}
       </div>
+      {exp.value.trim()&&(
+        <div style={{marginLeft:22,marginTop:4,padding:"5px 12px",background:"rgba(0,0,0,0.2)",borderRadius:8,borderLeft:"2px solid rgba(129,140,248,0.4)",display:"flex",alignItems:"center",minHeight:32,overflowX:"auto"}}>
+          <MathDisplay expr={exp.value} size="sm" style={{color:"#818cf8"}}/>
+        </div>
+      )}
       {showKbd && (
         <div style={{ marginTop:8, marginLeft:16 }}>
           <MathKeyboard inputRef={inputRef} value={exp.value} onChange={v => onUpdate(exp.id, v)}/>
@@ -1059,11 +1155,21 @@ function BasicCalc({ setMode }) {
     <div>
       <BackBtn setMode={setMode}/>
       <SectionTitle icon="⊞" title="Basic Calculator" color="#38bdf8"/>
-      <div className="calc-display">
-        <div className="display-input">
-          <span className="math-preview">{input ? renderMathExpr(input) : <span style={{color:"var(--muted)"}}>0</span>}</span>
+      <div className="calc-display" style={{minHeight:110,alignItems:"flex-end"}}>
+        {/* Live input rendered as math */}
+        <div style={{width:"100%",display:"flex",justifyContent:"flex-end",minHeight:34,alignItems:"center",overflowX:"auto"}}>
+          {input
+            ? <MathDisplay expr={input} size="md" style={{color:"rgba(148,163,184,0.85)"}}/>
+            : <span style={{color:"var(--muted)",fontFamily:"DM Mono",fontSize:15}}>0</span>}
         </div>
-        <div className={`display-result ${error?"error":result?"has-val":""}`}>{result||"—"}</div>
+        {/* Result rendered as larger math */}
+        <div style={{width:"100%",display:"flex",justifyContent:"flex-end",minHeight:42,alignItems:"center",overflowX:"auto"}}>
+          {error
+            ? <span style={{color:"var(--red)",fontFamily:"DM Mono",fontSize:16}}>Syntax Error</span>
+            : result
+              ? <MathDisplay expr={result} size="xl" style={{color:"#38bdf8",filter:"drop-shadow(0 0 12px rgba(56,189,248,0.4))"}}/>
+              : <span style={{color:"rgba(100,116,139,0.4)",fontFamily:"DM Mono",fontSize:28}}>—</span>}
+        </div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:10}}>
         {layout.flat().map((b,i)=>(
@@ -1101,13 +1207,262 @@ function Matrix({setMode}){
 }
 
 /* ── CALCULUS ──────────────────────────────────────────── */
-function Calculus({setMode}){
-  const[input,setInput]=useState("x^3 + 2*x^2 - x");const[result,setResult]=useState("");const[op,setOp]=useState("derivative");const[variable,setVar]=useState("x");const[error,setError]=useState("");const[showKbd,setShowKbd]=useState(false);const inputRef=useRef(null);
-  const compute=useCallback(()=>{try{let res;if(op==="derivative")res=math.derivative(input,variable).toString();else if(op==="simplify")res=math.simplify(input).toString();setResult(res);setError("");}catch{setError("Could not evaluate — check syntax");setResult("");}},[input,op,variable]);
-  useEffect(()=>{const h=e=>{if(e.target.tagName==="INPUT")return;if(e.key==="Enter")compute();};window.addEventListener("keydown",h);return()=>window.removeEventListener("keydown",h);},[compute]);
-  const ops=[{id:"derivative",label:"d/dx Derivative"},{id:"simplify",label:"≡ Simplify"}];
-  const examples=["x^3 - 2*x","sin(x)*cos(x)","e^x + ln(x)","x^4/4 - x^2"];
-  return(<div><BackBtn setMode={setMode}/><SectionTitle icon="∂" title="Calculus" color="#f472b6"/><div style={{display:"flex",gap:8,marginBottom:18}}>{ops.map(o=>(<button key={o.id} onClick={()=>setOp(o.id)} style={{flex:1,padding:"9px",borderRadius:10,fontFamily:"DM Mono",fontSize:13,cursor:"pointer",background:op===o.id?"rgba(244,114,182,0.15)":"var(--surface2)",border:`1px solid ${op===o.id?"rgba(244,114,182,0.4)":"var(--border)"}`,color:op===o.id?"#f472b6":"var(--muted)"}}>{o.label}</button>))}</div><div style={{padding:"10px 14px",background:"var(--surface2)",borderRadius:10,marginBottom:8,minHeight:36}}><span className="math-preview">{input?renderMathExpr(input):<span style={{color:"var(--muted)"}}>expression…</span>}</span></div><div style={{display:"flex",gap:6,marginBottom:10}}><input ref={inputRef} className="cf-input" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&compute()} placeholder="e.g. x^2 + sin(x)" style={{flex:1}}/><button onClick={()=>setShowKbd(v=>!v)} style={{width:40,flexShrink:0,borderRadius:10,cursor:"pointer",background:showKbd?"rgba(244,114,182,0.15)":"var(--surface2)",border:`1px solid ${showKbd?"rgba(244,114,182,0.4)":"var(--border)"}`,color:showKbd?"#f472b6":"var(--muted)",fontSize:17,display:"flex",alignItems:"center",justifyContent:"center"}}>⌨</button></div>{showKbd&&<div style={{marginBottom:12}}><MathKeyboard inputRef={inputRef} value={input} onChange={setInput}/></div>}{op==="derivative"&&(<div style={{marginBottom:14}}><div style={{fontSize:12,color:"var(--muted)",marginBottom:6}}>With respect to</div><input className="cf-input" value={variable} onChange={e=>setVar(e.target.value)} style={{width:80}}/></div>)}<button onClick={compute} style={{width:"100%",padding:"12px",borderRadius:12,background:"linear-gradient(135deg,rgba(244,114,182,0.2),rgba(129,140,248,0.2))",border:"1px solid rgba(244,114,182,0.3)",color:"#f472b6",fontFamily:"DM Mono",fontSize:15,cursor:"pointer",fontWeight:500,marginBottom:14}}>Compute ↵</button>{error&&<div style={{marginBottom:14,color:"var(--red)",fontSize:13,padding:"10px 14px",background:"rgba(248,113,113,0.08)",borderRadius:10,border:"1px solid rgba(248,113,113,0.2)"}}>{error}</div>}{result&&(<div style={{padding:"16px 20px",background:"rgba(244,114,182,0.05)",border:"1px solid rgba(244,114,182,0.2)",borderRadius:12,marginBottom:18}}><div style={{fontSize:11,color:"#f472b6",marginBottom:8,fontFamily:"DM Mono"}}>RESULT</div><div className="math-preview" style={{fontSize:20,color:"var(--text)"}}>{renderMathExpr(result)}</div></div>)}<div><div style={{fontSize:12,color:"var(--muted)",marginBottom:8}}>Examples</div><div style={{display:"flex",flexWrap:"wrap",gap:8}}>{examples.map(ex=>(<button key={ex} onClick={()=>setInput(ex)} style={{padding:"5px 12px",borderRadius:8,background:"var(--surface2)",border:"1px solid var(--border)",color:"var(--muted)",fontFamily:"DM Mono",fontSize:12,cursor:"pointer"}}>{ex}</button>))}</div></div></div>);
+const CALC_OPS = [
+  {id:"deriv1",   label:"d/dx",    group:"Basic",   color:"#f472b6", desc:"First Derivative",           inputs:1},
+  {id:"deriv2",   label:"d²/dx²",  group:"Basic",   color:"#f472b6", desc:"Second Derivative",          inputs:1},
+  {id:"derivN",   label:"dⁿ/dxⁿ", group:"Basic",   color:"#f472b6", desc:"nth Order Derivative",       inputs:1, hasN:true},
+  {id:"product",  label:"UV Rule", group:"Rules",   color:"#818cf8", desc:"Product Rule",               inputs:2},
+  {id:"quotient", label:"U/V Rule",group:"Rules",   color:"#818cf8", desc:"Quotient Rule",              inputs:2},
+  {id:"chain",    label:"Chain ∘", group:"Rules",   color:"#818cf8", desc:"Chain Rule",                 inputs:2},
+  {id:"partial_x",label:"∂/∂x",   group:"Partial", color:"#38bdf8", desc:"Partial w.r.t. x",          inputs:1},
+  {id:"partial_y",label:"∂/∂y",   group:"Partial", color:"#38bdf8", desc:"Partial w.r.t. y",          inputs:1},
+  {id:"simplify", label:"Simplify",group:"Algebra", color:"#34d399", desc:"Algebraic Simplification",   inputs:1},
+];
+
+const OP_FORMULA = {
+  deriv1:    {tex:"d/dx [ f(x) ]",  rule:"Basic differentiation"},
+  deriv2:    {tex:"d²/dx² [ f(x) ]",rule:"Apply d/dx twice"},
+  derivN:    {tex:"dⁿ/dxⁿ [ f(x) ]",rule:"Repeated differentiation"},
+  product:   {tex:"d/dx [u·v] = u′·v + u·v′",      rule:"Product Rule"},
+  quotient:  {tex:"d/dx [u/v] = (u′v − uv′) / v²", rule:"Quotient Rule"},
+  chain:     {tex:"d/dx [f(g)] = f′(g(x)) · g′(x)", rule:"Chain Rule"},
+  partial_x: {tex:"∂f/∂x  (y treated as constant)",  rule:"Partial Derivative"},
+  partial_y: {tex:"∂f/∂y  (x treated as constant)",  rule:"Partial Derivative"},
+  simplify:  {tex:"Simplify algebraic expression",    rule:"Algebra"},
+};
+
+const OP_EXAMPLES = {
+  deriv1:    [["x^3 - 2*x"],["sin(x)*cos(x)"],["e^x + ln(x)"],["x^4/4 - x^2"]],
+  deriv2:    [["sin(x)"],["x^5 - 3*x^2"],["e^(2*x)"],["ln(x)"]],
+  derivN:    [["sin(x)"],["e^x"],["x^6 - x^3"]],
+  product:   [["x^2","sin(x)"],["e^x","ln(x)"],["x^3","cos(x)"],["sqrt(x)","e^x"]],
+  quotient:  [["sin(x)","x"],["x^2","x+1"],["e^x","x^2"],["ln(x)","x"]],
+  chain:     [["sin(u)","x^2"],["e^u","sin(x)"],["u^3","x^2+1"],["ln(u)","x^2+1"]],
+  partial_x: [["x^2*y + sin(x*y)"],["x^3 + y^3 - 3*x*y"],["e^(x+y)"],["x^2*y^2"]],
+  partial_y: [["x^2*y + sin(x*y)"],["x*y^3 + ln(y)"],["x^2*y^3"],["e^(x*y)"]],
+  simplify:  [["2*x + 3*x"],["sin(x)^2 + cos(x)^2"],["(x+1)^2 - x^2"],["x*(x+2)"]],
+};
+
+function runCalc(op, v1, v2, N) {
+  const n = Math.min(Math.max(1, parseInt(N)||2), 6);
+  const safe = (expr) => { try { return math.simplify(expr).toString(); } catch { return expr.toString(); } };
+  switch(op) {
+    case 'deriv1': {
+      const d = math.derivative(v1,'x');
+      return [{label:"f(x)",expr:v1},{label:"f ′(x)",expr:d.toString(),hi:true}];
+    }
+    case 'deriv2': {
+      const d1 = math.derivative(v1,'x');
+      const d2 = math.derivative(d1.toString(),'x');
+      return [{label:"f(x)",expr:v1},{label:"f ′(x)",expr:d1.toString()},{label:"f ″(x)",expr:d2.toString(),hi:true}];
+    }
+    case 'derivN': {
+      const sup=['','′','″','‴','⁴','⁵','⁶'];
+      const steps=[{label:"f(x)",expr:v1}]; let cur=v1;
+      for (let i=1;i<=n;i++) { const d=math.derivative(cur,'x'); cur=d.toString(); steps.push({label:`f${sup[i]||`(${i})`}(x)`,expr:cur,hi:i===n}); }
+      return steps;
+    }
+    case 'product': {
+      const du=math.derivative(v1,'x').toString(), dv=math.derivative(v2,'x').toString();
+      const res=safe(`(${du})*(${v2}) + (${v1})*(${dv})`);
+      return [{label:"u(x)",expr:v1},{label:"u ′(x)",expr:du},{label:"v(x)",expr:v2},{label:"v ′(x)",expr:dv},{label:"u′v + uv′",expr:res,hi:true}];
+    }
+    case 'quotient': {
+      const du=math.derivative(v1,'x').toString(), dv=math.derivative(v2,'x').toString();
+      const res=safe(`((${du})*(${v2}) - (${v1})*(${dv})) / ((${v2})^2)`);
+      return [{label:"u(x)",expr:v1},{label:"u ′(x)",expr:du},{label:"v(x)",expr:v2},{label:"v ′(x)",expr:dv},{label:"(u′v−uv′)/v²",expr:res,hi:true}];
+    }
+    case 'chain': {
+      const df=math.derivative(v1,'u').toString(), dg=math.derivative(v2,'x').toString();
+      const dfSub=df.replace(/\bu\b/g,`(${v2})`);
+      const res=safe(`(${dfSub}) * (${dg})`);
+      return [{label:"f(u)",expr:v1},{label:"f ′(u)",expr:df},{label:"g(x)",expr:v2},{label:"g ′(x)",expr:dg},{label:"f′(g(x))·g′(x)",expr:res,hi:true}];
+    }
+    case 'partial_x': {
+      const d=math.derivative(v1,'x').toString();
+      return [{label:"f(x, y)",expr:v1},{label:"∂f / ∂x",expr:d,hi:true}];
+    }
+    case 'partial_y': {
+      const d=math.derivative(v1,'y').toString();
+      return [{label:"f(x, y)",expr:v1},{label:"∂f / ∂y",expr:d,hi:true}];
+    }
+    case 'simplify': {
+      const s=math.simplify(v1).toString();
+      return [{label:"Input",expr:v1},{label:"Simplified",expr:s,hi:true}];
+    }
+    default: return [];
+  }
+}
+
+function Calculus({setMode}) {
+  const [op,setOp]=useState("deriv1");
+  const [v1,setV1]=useState("x^3 + 2*x^2 - x");
+  const [v2,setV2]=useState("sin(x)");
+  const [nOrder,setNOrder]=useState("2");
+  const [steps,setSteps]=useState(null);
+  const [error,setError]=useState("");
+  const [kbd1,setKbd1]=useState(false);
+  const [kbd2,setKbd2]=useState(false);
+  const ref1=useRef(null), ref2=useRef(null);
+  const curOp=CALC_OPS.find(o=>o.id===op);
+  const col=curOp?.color||"#f472b6";
+
+  const compute=useCallback(()=>{
+    setError(""); setSteps(null);
+    try { setSteps(runCalc(op,v1.trim(),v2.trim(),nOrder)); }
+    catch(e) { setError(e.message||"Computation error — check syntax"); }
+  },[op,v1,v2,nOrder]);
+
+  useEffect(()=>{
+    const h=e=>{if(e.target.tagName==="INPUT")return;if(e.key==="Enter")compute();};
+    window.addEventListener("keydown",h); return()=>window.removeEventListener("keydown",h);
+  },[compute]);
+
+  const groups=["Basic","Rules","Partial","Algebra"];
+
+  return (
+    <div>
+      <BackBtn setMode={setMode}/>
+      <SectionTitle icon="∂" title="Calculus" color="#f472b6"/>
+
+      {/* Operation tabs grouped */}
+      <div style={{marginBottom:16}}>
+        {groups.map(g=>{
+          const gOps=CALC_OPS.filter(o=>o.group===g);
+          const gc=gOps[0]?.color||"#f472b6";
+          return (
+            <div key={g} style={{marginBottom:10}}>
+              <div style={{fontSize:9,color:"var(--muted)",fontFamily:"DM Mono",letterSpacing:"0.1em",marginBottom:5}}>{g.toUpperCase()}</div>
+              <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                {gOps.map(o=>(
+                  <button key={o.id} onClick={()=>{setOp(o.id);setSteps(null);setError("");}}
+                    style={{padding:"6px 13px",borderRadius:10,fontFamily:"DM Mono",fontSize:12,cursor:"pointer",
+                      background:op===o.id?`rgba(${hexToRgb(gc)},0.18)`:"var(--surface2)",
+                      border:`1px solid ${op===o.id?gc+"66":"var(--border)"}`,
+                      color:op===o.id?gc:"var(--muted)",fontWeight:op===o.id?600:400,transition:"all 0.15s"}}>
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Formula card */}
+      <div style={{padding:"11px 16px",background:`rgba(${hexToRgb(col)},0.07)`,border:`1px solid ${col}33`,borderRadius:11,marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
+        <span style={{fontSize:20,color:col,flexShrink:0}}>∂</span>
+        <div>
+          <div style={{fontFamily:"DM Mono",fontSize:12,color:col,letterSpacing:"0.04em",marginBottom:2}}>{curOp?.desc}</div>
+          <div style={{fontFamily:"DM Mono",fontSize:11,color:"rgba(226,232,240,0.55)"}}>{OP_FORMULA[op]?.tex}</div>
+        </div>
+      </div>
+
+      {/* Input 1 */}
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,color:"var(--muted)",marginBottom:5,fontFamily:"DM Mono",letterSpacing:"0.05em"}}>
+          {curOp?.inputs===2?(op==="chain"?"f(u) =":"u(x) ="):(op==="partial_x"||op==="partial_y"?"f(x,y) =":"f(x) =")}
+        </div>
+        <div style={{padding:"10px 14px",background:"var(--surface)",border:`1px solid rgba(${hexToRgb(col)},0.2)`,borderRadius:10,marginBottom:7,minHeight:42,display:"flex",alignItems:"center",overflowX:"auto"}}>
+          {v1 ? <MathDisplay expr={v1} size="md"/> : <span style={{color:"var(--muted)",fontFamily:"DM Mono",fontSize:13}}>enter expression…</span>}
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          <input ref={ref1} className="cf-input" value={v1} onChange={e=>setV1(e.target.value)} onKeyDown={e=>e.key==="Enter"&&compute()}
+            placeholder={op==="chain"?"e.g. sin(u)  or  u^3":"e.g. x^3 + 2*x - 1"}
+            style={{flex:1,borderColor:`rgba(${hexToRgb(col)},0.3)`}}/>
+          <button onClick={()=>setKbd1(k=>!k)} style={{width:38,height:40,borderRadius:9,flexShrink:0,cursor:"pointer",
+            background:kbd1?`rgba(${hexToRgb(col)},0.15)`:"var(--surface2)",
+            border:`1px solid ${kbd1?col+"55":"var(--border)"}`,color:kbd1?col:"var(--muted)",
+            fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>⌨</button>
+        </div>
+        {kbd1&&<div style={{marginTop:8}}><MathKeyboard inputRef={ref1} value={v1} onChange={setV1}/></div>}
+      </div>
+
+      {/* Input 2 */}
+      {curOp?.inputs===2&&(
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11,color:"var(--muted)",marginBottom:5,fontFamily:"DM Mono",letterSpacing:"0.05em"}}>
+            {op==="chain"?"g(x) =":"v(x) ="}
+          </div>
+          <div style={{padding:"10px 14px",background:"var(--surface)",border:`1px solid rgba(${hexToRgb(col)},0.2)`,borderRadius:10,marginBottom:7,minHeight:42,display:"flex",alignItems:"center",overflowX:"auto"}}>
+            {v2 ? <MathDisplay expr={v2} size="md"/> : <span style={{color:"var(--muted)",fontFamily:"DM Mono",fontSize:13}}>enter expression…</span>}
+          </div>
+          <div style={{display:"flex",gap:6}}>
+            <input ref={ref2} className="cf-input" value={v2} onChange={e=>setV2(e.target.value)} onKeyDown={e=>e.key==="Enter"&&compute()}
+              placeholder={op==="chain"?"g(x) e.g. x^2":"v(x) e.g. cos(x)"}
+              style={{flex:1,borderColor:`rgba(${hexToRgb(col)},0.3)`}}/>
+            <button onClick={()=>setKbd2(k=>!k)} style={{width:38,height:40,borderRadius:9,flexShrink:0,cursor:"pointer",
+              background:kbd2?`rgba(${hexToRgb(col)},0.15)`:"var(--surface2)",
+              border:`1px solid ${kbd2?col+"55":"var(--border)"}`,color:kbd2?col:"var(--muted)",
+              fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>⌨</button>
+          </div>
+          {kbd2&&<div style={{marginTop:8}}><MathKeyboard inputRef={ref2} value={v2} onChange={setV2}/></div>}
+        </div>
+      )}
+
+      {/* n selector */}
+      {curOp?.hasN&&(
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+          <span style={{fontSize:12,color:"var(--muted)",fontFamily:"DM Mono"}}>Order n =</span>
+          <div style={{display:"flex",gap:5}}>
+            {[2,3,4,5,6].map(n=>(
+              <button key={n} onClick={()=>setNOrder(String(n))} style={{width:34,height:34,borderRadius:8,fontFamily:"DM Mono",fontSize:13,cursor:"pointer",
+                background:nOrder===String(n)?`rgba(${hexToRgb(col)},0.2)`:"var(--surface2)",
+                border:`1px solid ${nOrder===String(n)?col+"55":"var(--border)"}`,
+                color:nOrder===String(n)?col:"var(--muted)"}}>
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Compute */}
+      <button onClick={compute} style={{width:"100%",padding:"13px",borderRadius:12,
+        background:`linear-gradient(135deg,rgba(${hexToRgb(col)},0.22),rgba(129,140,248,0.12))`,
+        border:`1px solid ${col}44`,color:col,fontFamily:"DM Mono",fontSize:15,cursor:"pointer",fontWeight:600,marginBottom:14}}>
+        Compute ↵
+      </button>
+
+      {/* Error */}
+      {error&&<div style={{marginBottom:14,color:"var(--red)",fontSize:13,padding:"10px 14px",background:"rgba(248,113,113,0.08)",borderRadius:10,border:"1px solid rgba(248,113,113,0.2)"}}>{error}</div>}
+
+      {/* Step results */}
+      {steps&&(
+        <div style={{marginBottom:18}}>
+          {steps.map((step,i)=>(
+            <div key={i} style={{padding:"12px 16px",
+              background:step.hi?`rgba(${hexToRgb(col)},0.08)`:"var(--surface)",
+              border:`1px solid ${step.hi?col+"44":"var(--border)"}`,
+              borderRadius:10,marginBottom:6,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+              <span style={{fontFamily:"DM Mono",fontSize:11,minWidth:80,flexShrink:0,
+                color:step.hi?col:"var(--muted)",fontWeight:step.hi?600:400,letterSpacing:"0.04em"}}>
+                {step.label}
+              </span>
+              <div style={{flex:1,display:"flex",alignItems:"center",overflowX:"auto",padding:"2px 0"}}>
+                <MathDisplay expr={step.expr} size={step.hi?"lg":"md"}
+                  style={{color:step.hi?"var(--text)":"rgba(226,232,240,0.72)"}}/>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Examples */}
+      <div>
+        <div style={{fontSize:10,color:"var(--muted)",marginBottom:6,fontFamily:"DM Mono",letterSpacing:"0.08em"}}>EXAMPLES</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+          {(OP_EXAMPLES[op]||[]).map((ex,i)=>(
+            <button key={i} onClick={()=>{setV1(ex[0]);if(ex[1])setV2(ex[1]);setSteps(null);setError("");}}
+              style={{padding:"4px 11px",borderRadius:8,background:"var(--surface2)",border:"1px solid var(--border)",
+                color:"var(--muted)",fontFamily:"DM Mono",fontSize:11,cursor:"pointer"}}>
+              {ex.length===2?`u=${ex[0]}, v=${ex[1]}`:ex[0]}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /* ── SHARED ──────────────────────────────────────────────── */
