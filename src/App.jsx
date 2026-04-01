@@ -783,14 +783,19 @@ function DesmosGraph({ expressions }) {
   );
 }
 
-function ExprRow({ exp, onUpdate, onRemove, showRemove }) {
+function ExprRow({ exp, onUpdate, onRemove, showRemove, isActive, onFocus }) {
   const [showKbd,setShowKbd]=useState(false);
   const inputRef=useRef(null);
   return (
     <div style={{marginBottom:10}}>
       <div style={{display:"flex",gap:6,alignItems:"center"}}>
         <div style={{width:10,height:10,borderRadius:"50%",background:exp.color,flexShrink:0,boxShadow:`0 0 6px ${exp.color}88`}}/>
-        <input ref={inputRef} className="cf-input" value={exp.value} onChange={e=>onUpdate(exp.id,e.target.value)} placeholder="e.g. sin(x), e^x, x^2-3" style={{flex:1,borderColor:exp.color+"55",padding:"8px 12px",fontSize:14}}/>
+        <input ref={inputRef} className="cf-input" value={exp.value}
+          onChange={e=>onUpdate(exp.id,e.target.value)}
+          onFocus={onFocus}
+          placeholder="e.g. sin(x), e^x, x^2-3"
+          style={{flex:1,borderColor:isActive?exp.color:exp.color+"55",padding:"8px 12px",fontSize:14,
+            boxShadow:isActive?`0 0 0 2px ${exp.color}33`:undefined}}/>
         <button onClick={()=>setShowKbd(v=>!v)} title="Math keyboard" style={{width:34,height:34,borderRadius:8,flexShrink:0,cursor:"pointer",background:showKbd?"rgba(129,140,248,0.2)":"var(--surface2)",border:`1px solid ${showKbd?"rgba(129,140,248,0.5)":"var(--border)"}`,color:showKbd?"#818cf8":"var(--muted)",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>⌨</button>
         {showRemove&&<button onClick={()=>onRemove(exp.id)} style={{width:34,height:34,borderRadius:8,flexShrink:0,background:"none",border:"1px solid var(--border)",color:"var(--muted)",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>}
       </div>
@@ -806,21 +811,49 @@ function ExprRow({ exp, onUpdate, onRemove, showRemove }) {
 
 function Graphing({ setMode }) {
   const [expressions,setExpressions]=useState([{id:1,value:"sin(x)",color:GRAPH_COLORS[0]},{id:2,value:"cos(x)",color:GRAPH_COLORS[1]}]);
+  const [activeId, setActiveId] = useState(1);
   const update=(id,v)=>setExpressions(e=>e.map(ex=>ex.id===id?{...ex,value:v}:ex));
-  const remove=(id)=>setExpressions(e=>e.filter(ex=>ex.id!==id));
-  const add=()=>{if(expressions.length>=8)return;setExpressions(e=>[...e,{id:Date.now(),value:"",color:GRAPH_COLORS[e.length%GRAPH_COLORS.length]}]);};
-  const EXAMPLES=["sin(x)","cos(x)","tan(x)","x^2","x^3-x","e^x","e^(-x^2)","1/x","sqrt(x)","abs(x)","log(x)","floor(x)","e^(i*x)"];
+  const remove=(id)=>{
+    setExpressions(e=>{
+      const next=e.filter(ex=>ex.id!==id);
+      if(activeId===id && next.length>0) setActiveId(next[next.length-1].id);
+      return next;
+    });
+  };
+  const add=()=>{
+    if(expressions.length>=8)return;
+    const newId=Date.now();
+    setExpressions(e=>[...e,{id:newId,value:"",color:GRAPH_COLORS[e.length%GRAPH_COLORS.length]}]);
+    setActiveId(newId);
+  };
+  // Quick examples: add as a new graph (or replace active if it's empty)
+  const addExample=(ex)=>{
+    const active=expressions.find(e=>e.id===activeId);
+    if(active && !active.value.trim()) {
+      update(activeId, ex);
+    } else {
+      if(expressions.length>=8) { update(activeId,ex); return; }
+      const newId=Date.now();
+      setExpressions(e=>[...e,{id:newId,value:ex,color:GRAPH_COLORS[e.length%GRAPH_COLORS.length]}]);
+      setActiveId(newId);
+    }
+  };
+  const EXAMPLES=["sin(x)","cos(x)","tan(x)","x^2","x^3-x","e^x","e^(-x^2)","1/x","sqrt(x)","abs(x)","log(x)","floor(x)"];
   return (
     <div>
       <DesmosGraph expressions={expressions}/>
       <div style={{marginTop:14}}>
-        {expressions.map(exp=>(<ExprRow key={exp.id} exp={exp} onUpdate={update} onRemove={remove} showRemove={expressions.length>1}/>))}
+        {expressions.map(exp=>(
+          <ExprRow key={exp.id} exp={exp} onUpdate={(id,v)=>{update(id,v);setActiveId(id);}}
+            onRemove={remove} showRemove={expressions.length>1}
+            isActive={activeId===exp.id} onFocus={()=>setActiveId(exp.id)}/>
+        ))}
         <button onClick={add} style={{marginTop:6,padding:"7px 14px",background:"rgba(129,140,248,0.1)",border:"1px solid rgba(129,140,248,0.25)",borderRadius:10,color:"#818cf8",fontSize:13,cursor:"pointer"}}>+ Add function</button>
       </div>
       <div style={{marginTop:14}}>
-        <div style={{fontSize:11,color:"var(--muted)",marginBottom:6}}>Quick examples:</div>
+        <div style={{fontSize:11,color:"var(--muted)",marginBottom:6}}>Quick add:</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-          {EXAMPLES.map(ex=>(<button key={ex} onClick={()=>update(expressions[0].id,ex)} style={{padding:"3px 9px",borderRadius:7,background:"var(--surface2)",border:"1px solid var(--border)",color:"var(--muted)",fontFamily:"DM Mono",fontSize:11,cursor:"pointer"}}>{ex}</button>))}
+          {EXAMPLES.map(ex=>(<button key={ex} onClick={()=>addExample(ex)} style={{padding:"3px 9px",borderRadius:7,background:"var(--surface2)",border:"1px solid var(--border)",color:"var(--muted)",fontFamily:"DM Mono",fontSize:11,cursor:"pointer"}}>{ex}</button>))}
         </div>
       </div>
     </div>
@@ -1555,6 +1588,7 @@ function BasicCalc({ setMode }) {
   const [error,setError]   = useState(false);
   const [pressed,setPressed] = useState(null);
   const [showConst, setShowConst] = useState(false);
+  const inputRef = useRef(null);
 
   const evaluate = useCallback((expr) => {
     if (!expr) return;
@@ -1578,29 +1612,51 @@ function BasicCalc({ setMode }) {
     } catch { setResult("Syntax Error"); setError(true); }
   }, []);
 
-  const handleBtn = useCallback((val) => {
+  // Insert at cursor position inside the real input
+  const insertAtCursor = useCallback((val) => {
     setPressed(val); setTimeout(() => setPressed(null), 120);
-    if (val === "C")   { setInput(""); setResult(""); setError(false); return; }
-    if (val === "⌫")   { setInput(p => p.slice(0,-1)); return; }
+    if (val === "C")   { setInput(""); setResult(""); setError(false); inputRef.current?.focus(); return; }
     if (val === "=")   { evaluate(input); return; }
-    if (val === "+/-") { setInput(p => p.startsWith("-") ? p.slice(1) : p ? "-"+p : ""); return; }
-    if (val === "%")   { try { setInput(p => String(parseFloat(p)/100)); } catch {} return; }
-    setInput(p => p + val);
+
+    const el = inputRef.current;
+    if (!el) { setInput(p => p + val); return; }
+
+    const s = el.selectionStart ?? input.length;
+    const e2 = el.selectionEnd ?? input.length;
+
+    if (val === "⌫") {
+      if (e2 > s) {
+        // delete selection
+        const next = input.slice(0, s) + input.slice(e2);
+        setInput(next);
+        requestAnimationFrame(() => { el.focus(); el.setSelectionRange(s, s); });
+      } else if (s > 0) {
+        const next = input.slice(0, s - 1) + input.slice(s);
+        setInput(next);
+        requestAnimationFrame(() => { el.focus(); el.setSelectionRange(s - 1, s - 1); });
+      }
+      return;
+    }
+
+    const ins = val === "÷" ? "/" : val === "×" ? "*" : val === "−" ? "-" : val;
+    const next = input.slice(0, s) + ins + input.slice(e2);
+    setInput(next);
+    const pos = s + ins.length;
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(pos, pos); });
   }, [input, evaluate]);
 
   useEffect(() => {
     const h = (e) => {
-      if (e.target.tagName==="INPUT"||e.target.tagName==="TEXTAREA") return;
+      if (e.target === inputRef.current) return; // let the real input handle it
       const k = e.key;
-      if (/^[0-9]$/.test(k)) handleBtn(k);
-      else if (["+","-","*","/",".","(",")"].includes(k)) handleBtn(k);
-      else if (k==="Enter"||k==="=") handleBtn("=");
-      else if (k==="Backspace") handleBtn("⌫");
-      else if (k==="Escape") handleBtn("C");
+      if (/^[0-9]$/.test(k)) insertAtCursor(k);
+      else if (["+","-","*","/",".","(",")"].includes(k)) insertAtCursor(k);
+      else if (k==="Enter"||k==="=") insertAtCursor("=");
+      else if (k==="Escape") insertAtCursor("C");
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [handleBtn]);
+  }, [insertAtCursor]);
 
   const layout = [
     ["C","(",")","÷"],
@@ -1610,7 +1666,6 @@ function BasicCalc({ setMode }) {
     ["0",".","⌫","="],
   ];
 
-  // Beautiful button style
   const btnStyle = (b) => {
     const isOp = ["÷","×","−","+"].includes(b);
     const isEq = b === "=";
@@ -1647,7 +1702,6 @@ function BasicCalc({ setMode }) {
       boxShadow: isActive ? "none" : "0 2px 6px rgba(0,0,0,0.2)",
       transform: isActive ? "scale(0.93)" : "translateY(-1px)",
     };
-    // ⌫
     return {
       background: isActive ? "rgba(251,146,60,0.15)" : "rgba(251,146,60,0.07)",
       border: "1px solid rgba(251,146,60,0.2)", color: "#fb923c", fontSize: 18,
@@ -1657,7 +1711,6 @@ function BasicCalc({ setMode }) {
 
   const fnRow = ["sin(","cos(","tan(","√(","^","log(","ln(","asin(","π","e"];
 
-  // Constant groups
   const CONSTS = [
     {label:"π",  ins:"pi",       desc:"3.14159…"},
     {label:"e",  ins:"e",        desc:"2.71828…"},
@@ -1675,14 +1728,24 @@ function BasicCalc({ setMode }) {
 
   return (
     <div>
-      {/* Display */}
-      <div className="calc-display" style={{minHeight:110,alignItems:"flex-end",marginBottom:12}}>
-        <div style={{width:"100%",display:"flex",justifyContent:"flex-end",minHeight:32,alignItems:"center",overflowX:"auto"}}>
-          {input
-            ? <MathDisplay expr={input} size="md" style={{color:"rgba(148,163,184,0.85)"}}/>
-            : <span style={{color:"var(--muted)",fontFamily:"DM Mono",fontSize:15}}>0</span>}
-        </div>
-        <div style={{width:"100%",display:"flex",justifyContent:"flex-end",minHeight:48,alignItems:"center",overflowX:"auto"}}>
+      {/* Display — real visible editable input */}
+      <div className="calc-display" style={{minHeight:110,alignItems:"stretch",marginBottom:12,padding:0,overflow:"hidden",flexDirection:"column",justifyContent:"space-between"}}>
+        <input
+          ref={inputRef}
+          value={input}
+          onChange={e=>{setInput(e.target.value);setResult("");setError(false);}}
+          onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();evaluate(input);}}}
+          placeholder="Type or tap buttons…"
+          spellCheck={false}
+          autoComplete="off"
+          style={{
+            width:"100%",background:"transparent",border:"none",outline:"none",
+            color:"rgba(148,163,184,0.9)",fontFamily:"DM Mono,monospace",
+            fontSize:"clamp(15px,4vw,18px)",textAlign:"right",
+            padding:"14px 16px 6px",caretColor:"var(--accent)",
+          }}
+        />
+        <div style={{width:"100%",display:"flex",justifyContent:"flex-end",alignItems:"center",overflowX:"auto",padding:"0 16px 12px",minHeight:48}}>
           {error
             ? <span style={{color:"var(--red)",fontFamily:"DM Mono",fontSize:16}}>Syntax Error</span>
             : result
@@ -1694,7 +1757,7 @@ function BasicCalc({ setMode }) {
       {/* Main grid */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:8}}>
         {layout.flat().map((b,i)=>(
-          <button key={i} onClick={()=>handleBtn(b==="÷"?"/":b==="×"?"*":b==="−"?"-":b)}
+          <button key={i} onClick={()=>insertAtCursor(b)}
             style={{height:"clamp(56px,14vw,72px)",borderRadius:16,cursor:"pointer",
               fontFamily:"DM Mono",transition:"all 0.1s ease",display:"flex",alignItems:"center",
               justifyContent:"center",...btnStyle(b)}}>
@@ -1706,7 +1769,7 @@ function BasicCalc({ setMode }) {
       {/* Function row */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6,marginBottom:8}}>
         {fnRow.map((b,i)=>(
-          <button key={i} onClick={()=>handleBtn(b==="π"?"pi":b)}
+          <button key={i} onClick={()=>insertAtCursor(b==="π"?"pi":b)}
             style={{height:"clamp(36px,9vw,44px)",borderRadius:10,cursor:"pointer",
               fontFamily:"DM Mono",fontSize:11,transition:"all 0.1s",
               background:pressed===b?"rgba(129,140,248,0.2)":"rgba(129,140,248,0.07)",
@@ -1733,7 +1796,7 @@ function BasicCalc({ setMode }) {
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5,marginBottom:8,
           padding:10,background:"rgba(52,211,153,0.04)",border:"1px solid rgba(52,211,153,0.12)",borderRadius:12}}>
           {CONSTS.map((c,i)=>(
-            <button key={i} onClick={()=>handleBtn(c.ins)}
+            <button key={i} onClick={()=>insertAtCursor(c.ins)}
               style={{padding:"6px 4px",borderRadius:9,cursor:"pointer",
                 display:"flex",flexDirection:"column",alignItems:"center",gap:1,
                 background:"rgba(52,211,153,0.08)",border:"1px solid rgba(52,211,153,0.18)",
