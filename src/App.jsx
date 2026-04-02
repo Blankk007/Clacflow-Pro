@@ -660,27 +660,32 @@ function DesmosGraph({ expressions }) {
     const canvas = canvasRef.current; if (!canvas) return;
     const ctx = canvas.getContext("2d");
     const dpr = window.devicePixelRatio || 1;
-    const W = canvas.width / dpr;   // CSS pixels
-    const H = canvas.height / dpr;  // CSS pixels
+    const W = canvas.width / dpr;
+    const H = canvas.height / dpr;
     const v = vpRef.current;
+    const isLight = document.documentElement.classList.contains("light");
+    const bgColor = isLight ? "#f0f4ff" : "#080c18";
+    const gridColor = isLight ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.035)";
+    const axisColor = isLight ? "rgba(3,105,161,0.5)" : "rgba(56,189,248,0.6)";
+    const labelColor = isLight ? "rgba(71,85,105,0.9)" : "rgba(100,116,139,0.9)";
     ctx.save();
     ctx.scale(dpr, dpr);
-    ctx.fillStyle="#080c18"; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = bgColor; ctx.fillRect(0,0,W,H);
     const step=niceStep(v.scale);
     const xMin=v.cx-W/2/v.scale, xMax=v.cx+W/2/v.scale;
     const yMin=v.cy-H/2/v.scale, yMax=v.cy+H/2/v.scale;
     const sx=Math.ceil(xMin/step)*step, sy=Math.ceil(yMin/step)*step;
-    ctx.strokeStyle="rgba(255,255,255,0.035)"; ctx.lineWidth=1; ctx.beginPath();
+    ctx.strokeStyle=gridColor; ctx.lineWidth=1; ctx.beginPath();
     for(let gx=sx;gx<=xMax;gx+=step){const px=W/2+(gx-v.cx)*v.scale;ctx.moveTo(px,0);ctx.lineTo(px,H);}
     for(let gy=sy;gy<=yMax;gy+=step){const py=H/2-(gy-v.cy)*v.scale;ctx.moveTo(0,py);ctx.lineTo(W,py);}
     ctx.stroke();
     const ox=W/2+(0-v.cx)*v.scale, oy=H/2-(0-v.cy)*v.scale;
-    ctx.save(); ctx.shadowBlur=6; ctx.shadowColor="rgba(56,189,248,0.3)";
-    ctx.strokeStyle="rgba(56,189,248,0.6)"; ctx.lineWidth=1.5; ctx.beginPath();
+    ctx.save(); ctx.shadowBlur=6; ctx.shadowColor=isLight?"rgba(3,105,161,0.2)":"rgba(56,189,248,0.3)";
+    ctx.strokeStyle=axisColor; ctx.lineWidth=1.5; ctx.beginPath();
     ctx.moveTo(0,oy);ctx.lineTo(W,oy);ctx.moveTo(ox,0);ctx.lineTo(ox,H);ctx.stroke();ctx.restore();
     const isMobile = W < 400;
     const axisFontSize = isMobile ? 13 : 10;
-    ctx.font=`${axisFontSize}px DM Mono,monospace`; ctx.fillStyle="rgba(100,116,139,0.9)";
+    ctx.font=`${axisFontSize}px DM Mono,monospace`; ctx.fillStyle=labelColor;
     ctx.textAlign="center"; ctx.textBaseline="top";
     for(let gx=sx;gx<=xMax;gx+=step){if(Math.abs(gx)<step*0.01)continue;const px=W/2+(gx-v.cx)*v.scale;ctx.fillText(formatLabel(gx),px,Math.max(4,Math.min(H-16,oy+4)));}
     ctx.textAlign="right"; ctx.textBaseline="middle";
@@ -702,12 +707,19 @@ function DesmosGraph({ expressions }) {
       }
       ctx.stroke(); ctx.restore();
       const lx=W-8, lmx=v.cx+(lx-W/2)/v.scale, lmy=fn(lmx);
-      if(lmy!==null){const lpy=H/2-(lmy-v.cy)*v.scale;if(lpy>8&&lpy<H-8){ctx.save();ctx.font="bold 11px DM Mono,monospace";ctx.fillStyle=exp.color;ctx.textAlign="right";ctx.textBaseline="bottom";ctx.shadowBlur=4;ctx.shadowColor="#080c18";ctx.fillText(exp.value.slice(0,20),lx,lpy-3);ctx.restore();}}
+      if(lmy!==null){const lpy=H/2-(lmy-v.cy)*v.scale;if(lpy>8&&lpy<H-8){ctx.save();ctx.font="bold 11px DM Mono,monospace";ctx.fillStyle=exp.color;ctx.textAlign="right";ctx.textBaseline="bottom";ctx.shadowBlur=4;ctx.shadowColor=bgColor;ctx.fillText(exp.value.slice(0,20),lx,lpy-3);ctx.restore();}}
     });
     ctx.restore(); // pop dpr scale
   },[expressions]);
 
   useEffect(()=>{draw();},[vp,draw]);
+
+  // Redraw when light/dark theme changes
+  useEffect(()=>{
+    const obs = new MutationObserver(()=>draw());
+    obs.observe(document.documentElement, {attributes:true, attributeFilter:["class"]});
+    return ()=>obs.disconnect();
+  },[draw]);
 
   const handleWheel=useCallback((e)=>{
     e.preventDefault();
@@ -772,7 +784,7 @@ function DesmosGraph({ expressions }) {
   const reset=()=>{vpRef.current={cx:0,cy:0,scale:60};setVp({...vpRef.current});};
 
   return (
-    <div style={{position:"relative",width:"100%",height:370,borderRadius:14,overflow:"hidden",border:"1px solid rgba(56,189,248,0.15)",background:"#080c18"}}>
+    <div style={{position:"relative",width:"100%",height:"min(370px,55vw)",minHeight:260,borderRadius:14,overflow:"hidden",border:"1px solid rgba(56,189,248,0.15)",background:"var(--bg)"}}>
       <canvas ref={canvasRef} style={{display:"block",cursor:"crosshair"}} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseLeave} onTouchStart={handleTouchStart} onTouchEnd={()=>{touchRef.current=null;}}/>
       <div style={{position:"absolute",bottom:12,right:12,display:"flex",flexDirection:"column",gap:4}}>
         {[["＋",1],["－",-1]].map(([l,d])=>(<button key={l} onClick={()=>zoom(d)} style={{width:32,height:32,borderRadius:8,background:"rgba(14,18,32,0.9)",border:"1px solid rgba(56,189,248,0.25)",color:"#38bdf8",fontSize:18,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(4px)"}}>{l}</button>))}
@@ -783,19 +795,14 @@ function DesmosGraph({ expressions }) {
   );
 }
 
-function ExprRow({ exp, onUpdate, onRemove, showRemove, isActive, onFocus }) {
+function ExprRow({ exp, onUpdate, onRemove, showRemove }) {
   const [showKbd,setShowKbd]=useState(false);
   const inputRef=useRef(null);
   return (
     <div style={{marginBottom:10}}>
       <div style={{display:"flex",gap:6,alignItems:"center"}}>
         <div style={{width:10,height:10,borderRadius:"50%",background:exp.color,flexShrink:0,boxShadow:`0 0 6px ${exp.color}88`}}/>
-        <input ref={inputRef} className="cf-input" value={exp.value}
-          onChange={e=>onUpdate(exp.id,e.target.value)}
-          onFocus={onFocus}
-          placeholder="e.g. sin(x), e^x, x^2-3"
-          style={{flex:1,borderColor:isActive?exp.color:exp.color+"55",padding:"8px 12px",fontSize:14,
-            boxShadow:isActive?`0 0 0 2px ${exp.color}33`:undefined}}/>
+        <input ref={inputRef} className="cf-input" value={exp.value} onChange={e=>onUpdate(exp.id,e.target.value)} placeholder="e.g. sin(x), e^x, x^2-3" style={{flex:1,borderColor:exp.color+"55",padding:"8px 12px",fontSize:14}}/>
         <button onClick={()=>setShowKbd(v=>!v)} title="Math keyboard" style={{width:34,height:34,borderRadius:8,flexShrink:0,cursor:"pointer",background:showKbd?"rgba(129,140,248,0.2)":"var(--surface2)",border:`1px solid ${showKbd?"rgba(129,140,248,0.5)":"var(--border)"}`,color:showKbd?"#818cf8":"var(--muted)",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>⌨</button>
         {showRemove&&<button onClick={()=>onRemove(exp.id)} style={{width:34,height:34,borderRadius:8,flexShrink:0,background:"none",border:"1px solid var(--border)",color:"var(--muted)",cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>}
       </div>
@@ -811,49 +818,21 @@ function ExprRow({ exp, onUpdate, onRemove, showRemove, isActive, onFocus }) {
 
 function Graphing({ setMode }) {
   const [expressions,setExpressions]=useState([{id:1,value:"sin(x)",color:GRAPH_COLORS[0]},{id:2,value:"cos(x)",color:GRAPH_COLORS[1]}]);
-  const [activeId, setActiveId] = useState(1);
   const update=(id,v)=>setExpressions(e=>e.map(ex=>ex.id===id?{...ex,value:v}:ex));
-  const remove=(id)=>{
-    setExpressions(e=>{
-      const next=e.filter(ex=>ex.id!==id);
-      if(activeId===id && next.length>0) setActiveId(next[next.length-1].id);
-      return next;
-    });
-  };
-  const add=()=>{
-    if(expressions.length>=8)return;
-    const newId=Date.now();
-    setExpressions(e=>[...e,{id:newId,value:"",color:GRAPH_COLORS[e.length%GRAPH_COLORS.length]}]);
-    setActiveId(newId);
-  };
-  // Quick examples: add as a new graph (or replace active if it's empty)
-  const addExample=(ex)=>{
-    const active=expressions.find(e=>e.id===activeId);
-    if(active && !active.value.trim()) {
-      update(activeId, ex);
-    } else {
-      if(expressions.length>=8) { update(activeId,ex); return; }
-      const newId=Date.now();
-      setExpressions(e=>[...e,{id:newId,value:ex,color:GRAPH_COLORS[e.length%GRAPH_COLORS.length]}]);
-      setActiveId(newId);
-    }
-  };
-  const EXAMPLES=["sin(x)","cos(x)","tan(x)","x^2","x^3-x","e^x","e^(-x^2)","1/x","sqrt(x)","abs(x)","log(x)","floor(x)"];
+  const remove=(id)=>setExpressions(e=>e.filter(ex=>ex.id!==id));
+  const add=()=>{if(expressions.length>=8)return;setExpressions(e=>[...e,{id:Date.now(),value:"",color:GRAPH_COLORS[e.length%GRAPH_COLORS.length]}]);};
+  const EXAMPLES=["sin(x)","cos(x)","tan(x)","x^2","x^3-x","e^x","e^(-x^2)","1/x","sqrt(x)","abs(x)","log(x)","floor(x)","e^(i*x)"];
   return (
     <div>
       <DesmosGraph expressions={expressions}/>
       <div style={{marginTop:14}}>
-        {expressions.map(exp=>(
-          <ExprRow key={exp.id} exp={exp} onUpdate={(id,v)=>{update(id,v);setActiveId(id);}}
-            onRemove={remove} showRemove={expressions.length>1}
-            isActive={activeId===exp.id} onFocus={()=>setActiveId(exp.id)}/>
-        ))}
+        {expressions.map(exp=>(<ExprRow key={exp.id} exp={exp} onUpdate={update} onRemove={remove} showRemove={expressions.length>1}/>))}
         <button onClick={add} style={{marginTop:6,padding:"7px 14px",background:"rgba(129,140,248,0.1)",border:"1px solid rgba(129,140,248,0.25)",borderRadius:10,color:"#818cf8",fontSize:13,cursor:"pointer"}}>+ Add function</button>
       </div>
       <div style={{marginTop:14}}>
-        <div style={{fontSize:11,color:"var(--muted)",marginBottom:6}}>Quick add:</div>
+        <div style={{fontSize:11,color:"var(--muted)",marginBottom:6}}>Quick examples:</div>
         <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-          {EXAMPLES.map(ex=>(<button key={ex} onClick={()=>addExample(ex)} style={{padding:"3px 9px",borderRadius:7,background:"var(--surface2)",border:"1px solid var(--border)",color:"var(--muted)",fontFamily:"DM Mono",fontSize:11,cursor:"pointer"}}>{ex}</button>))}
+          {EXAMPLES.map(ex=>(<button key={ex} onClick={()=>update(expressions[0].id,ex)} style={{padding:"3px 9px",borderRadius:7,background:"var(--surface2)",border:"1px solid var(--border)",color:"var(--muted)",fontFamily:"DM Mono",fontSize:11,cursor:"pointer"}}>{ex}</button>))}
         </div>
       </div>
     </div>
@@ -1612,28 +1591,24 @@ function BasicCalc({ setMode }) {
     } catch { setResult("Syntax Error"); setError(true); }
   }, []);
 
-  // Insert at cursor position inside the real input
-  const insertAtCursor = useCallback((val) => {
+  const handleBtn = useCallback((val) => {
     setPressed(val); setTimeout(() => setPressed(null), 120);
     if (val === "C")   { setInput(""); setResult(""); setError(false); inputRef.current?.focus(); return; }
     if (val === "=")   { evaluate(input); return; }
 
     const el = inputRef.current;
-    if (!el) { setInput(p => p + val); return; }
-
-    const s = el.selectionStart ?? input.length;
-    const e2 = el.selectionEnd ?? input.length;
+    const s  = el ? (el.selectionStart ?? input.length) : input.length;
+    const e2 = el ? (el.selectionEnd   ?? input.length) : input.length;
 
     if (val === "⌫") {
       if (e2 > s) {
-        // delete selection
         const next = input.slice(0, s) + input.slice(e2);
         setInput(next);
-        requestAnimationFrame(() => { el.focus(); el.setSelectionRange(s, s); });
+        requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(s, s); });
       } else if (s > 0) {
         const next = input.slice(0, s - 1) + input.slice(s);
         setInput(next);
-        requestAnimationFrame(() => { el.focus(); el.setSelectionRange(s - 1, s - 1); });
+        requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(s-1, s-1); });
       }
       return;
     }
@@ -1642,21 +1617,23 @@ function BasicCalc({ setMode }) {
     const next = input.slice(0, s) + ins + input.slice(e2);
     setInput(next);
     const pos = s + ins.length;
-    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(pos, pos); });
+    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(pos, pos); });
   }, [input, evaluate]);
 
   useEffect(() => {
     const h = (e) => {
-      if (e.target === inputRef.current) return; // let the real input handle it
+      if (e.target === inputRef.current) return;
+      if (e.target.tagName==="INPUT"||e.target.tagName==="TEXTAREA") return;
       const k = e.key;
-      if (/^[0-9]$/.test(k)) insertAtCursor(k);
-      else if (["+","-","*","/",".","(",")"].includes(k)) insertAtCursor(k);
-      else if (k==="Enter"||k==="=") insertAtCursor("=");
-      else if (k==="Escape") insertAtCursor("C");
+      if (/^[0-9.]$/.test(k)) handleBtn(k);
+      else if (["+","-","*","/","(",")"].includes(k)) handleBtn(k);
+      else if (k==="Enter"||k==="=") handleBtn("=");
+      else if (k==="Backspace") handleBtn("⌫");
+      else if (k==="Escape") handleBtn("C");
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [insertAtCursor]);
+  }, [handleBtn]);
 
   const layout = [
     ["C","(",")","÷"],
@@ -1666,6 +1643,7 @@ function BasicCalc({ setMode }) {
     ["0",".","⌫","="],
   ];
 
+  // Beautiful button style
   const btnStyle = (b) => {
     const isOp = ["÷","×","−","+"].includes(b);
     const isEq = b === "=";
@@ -1702,6 +1680,7 @@ function BasicCalc({ setMode }) {
       boxShadow: isActive ? "none" : "0 2px 6px rgba(0,0,0,0.2)",
       transform: isActive ? "scale(0.93)" : "translateY(-1px)",
     };
+    // ⌫
     return {
       background: isActive ? "rgba(251,146,60,0.15)" : "rgba(251,146,60,0.07)",
       border: "1px solid rgba(251,146,60,0.2)", color: "#fb923c", fontSize: 18,
@@ -1709,8 +1688,24 @@ function BasicCalc({ setMode }) {
     };
   };
 
-  const fnRow = ["sin(","cos(","tan(","√(","^","log(","ln(","asin(","π","e"];
+  const fnRow = [
+    {label:"sin(",ins:"sin("},
+    {label:"cos(",ins:"cos("},
+    {label:"tan(",ins:"tan("},
+    {label:"√(",  ins:"sqrt("},
+    {label:"xⁿ",  ins:"^"},
+    {label:"ⁿ√x", ins:"^(1/"},
+    {label:"x²",  ins:"^2"},
+    {label:"x³",  ins:"^3"},
+    {label:"log(", ins:"log("},
+    {label:"ln(",  ins:"ln("},
+    {label:"asin(",ins:"asin("},
+    {label:"π",    ins:"pi"},
+    {label:"e",    ins:"e"},
+    {label:"abs(", ins:"abs("},
+  ];
 
+  // Constant groups
   const CONSTS = [
     {label:"π",  ins:"pi",       desc:"3.14159…"},
     {label:"e",  ins:"e",        desc:"2.71828…"},
@@ -1728,24 +1723,25 @@ function BasicCalc({ setMode }) {
 
   return (
     <div>
-      {/* Display — real visible editable input */}
-      <div className="calc-display" style={{minHeight:110,alignItems:"stretch",marginBottom:12,padding:0,overflow:"hidden",flexDirection:"column",justifyContent:"space-between"}}>
-        <input
-          ref={inputRef}
-          value={input}
-          onChange={e=>{setInput(e.target.value);setResult("");setError(false);}}
-          onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();evaluate(input);}}}
-          placeholder="Type or tap buttons…"
-          spellCheck={false}
-          autoComplete="off"
-          style={{
-            width:"100%",background:"transparent",border:"none",outline:"none",
-            color:"rgba(148,163,184,0.9)",fontFamily:"DM Mono,monospace",
-            fontSize:"clamp(15px,4vw,18px)",textAlign:"right",
-            padding:"14px 16px 6px",caretColor:"var(--accent)",
-          }}
-        />
-        <div style={{width:"100%",display:"flex",justifyContent:"flex-end",alignItems:"center",overflowX:"auto",padding:"0 16px 12px",minHeight:48}}>
+      {/* Display — readOnly prevents mobile keyboard; buttons insert at cursor */}
+      <div className="calc-display" style={{minHeight:110,alignItems:"flex-end",marginBottom:12}}>
+        <div style={{width:"100%",display:"flex",justifyContent:"flex-end",minHeight:32,alignItems:"center",overflowX:"auto"}}>
+          <input
+            ref={inputRef}
+            value={input}
+            readOnly
+            inputMode="none"
+            onChange={()=>{}}
+            placeholder="0"
+            style={{
+              width:"100%",background:"transparent",border:"none",outline:"none",
+              color:"rgba(148,163,184,0.9)",fontFamily:"DM Mono,monospace",
+              fontSize:"clamp(14px,3.5vw,17px)",textAlign:"right",
+              padding:0,caretColor:"var(--accent)",cursor:"text",
+            }}
+          />
+        </div>
+        <div style={{width:"100%",display:"flex",justifyContent:"flex-end",minHeight:48,alignItems:"center",overflowX:"auto"}}>
           {error
             ? <span style={{color:"var(--red)",fontFamily:"DM Mono",fontSize:16}}>Syntax Error</span>
             : result
@@ -1757,7 +1753,7 @@ function BasicCalc({ setMode }) {
       {/* Main grid */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:8}}>
         {layout.flat().map((b,i)=>(
-          <button key={i} onClick={()=>insertAtCursor(b)}
+          <button key={i} onClick={()=>handleBtn(b==="÷"?"/":b==="×"?"*":b==="−"?"-":b)}
             style={{height:"clamp(56px,14vw,72px)",borderRadius:16,cursor:"pointer",
               fontFamily:"DM Mono",transition:"all 0.1s ease",display:"flex",alignItems:"center",
               justifyContent:"center",...btnStyle(b)}}>
@@ -1767,15 +1763,15 @@ function BasicCalc({ setMode }) {
       </div>
 
       {/* Function row */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6,marginBottom:8}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:5,marginBottom:8}}>
         {fnRow.map((b,i)=>(
-          <button key={i} onClick={()=>insertAtCursor(b==="π"?"pi":b)}
-            style={{height:"clamp(36px,9vw,44px)",borderRadius:10,cursor:"pointer",
-              fontFamily:"DM Mono",fontSize:11,transition:"all 0.1s",
-              background:pressed===b?"rgba(129,140,248,0.2)":"rgba(129,140,248,0.07)",
+          <button key={i} onClick={()=>handleBtn(b.ins)}
+            style={{height:"clamp(34px,8vw,42px)",borderRadius:10,cursor:"pointer",
+              fontFamily:"DM Mono",fontSize:10,transition:"all 0.1s",
+              background:pressed===b.ins?"rgba(129,140,248,0.2)":"rgba(129,140,248,0.07)",
               border:"1px solid rgba(129,140,248,0.2)",color:"#818cf8",
-              transform:pressed===b?"scale(0.93)":undefined}}>
-            {b}
+              transform:pressed===b.ins?"scale(0.93)":undefined}}>
+            {b.label}
           </button>
         ))}
       </div>
@@ -1796,7 +1792,7 @@ function BasicCalc({ setMode }) {
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5,marginBottom:8,
           padding:10,background:"rgba(52,211,153,0.04)",border:"1px solid rgba(52,211,153,0.12)",borderRadius:12}}>
           {CONSTS.map((c,i)=>(
-            <button key={i} onClick={()=>insertAtCursor(c.ins)}
+            <button key={i} onClick={()=>handleBtn(c.ins)}
               style={{padding:"6px 4px",borderRadius:9,cursor:"pointer",
                 display:"flex",flexDirection:"column",alignItems:"center",gap:1,
                 background:"rgba(52,211,153,0.08)",border:"1px solid rgba(52,211,153,0.18)",
