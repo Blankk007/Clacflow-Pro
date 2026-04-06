@@ -1729,9 +1729,9 @@ function BasicCalc({ setMode }) {
           <input
             ref={inputRef}
             value={input}
-            readOnly
+            onChange={e=>{setInput(e.target.value);setResult("");setError(false);}}
+            onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();evaluate(input);}}}
             inputMode="none"
-            onChange={()=>{}}
             placeholder="0"
             style={{
               width:"100%",background:"transparent",border:"none",outline:"none",
